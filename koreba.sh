@@ -42,7 +42,11 @@ function debugmsg() {
 
 function errorCodes () {
 	echo -e "List of error codes:"
-	echo -e "\t1 : not found actions"
+	echo -e "\t  1 : not found actions"
+	echo -e "\t  2 : not found servername"
+	echo -e "\t  3 : not found config dir"
+	echo -e "\t  4 : not found config file"
+	echo -e "\t254 : not found translation file"
 	echo -e "\t255 : generic errors"
 }
 
@@ -50,25 +54,30 @@ function defaultSN(){
 	## search for default server name
 	if [ ! -r koreba_config_dir  ]; then 
 		error "$err_existence_config_dir"
+		return 3
 	elif [ ! -r koreba_config_file ]; then 
 		error "$err_existence_file_dir"
+		return 4
 	fi
 
 	defaultServer=""
 
 	echo $defaultServer
+
+	exit 0
 }
 
 function adds () {
 	servername=$1
 	
-	if (( $debug==1 )); then 
+	if (( debug==1 )); then 
 		debugmsg "[add] $dbg_actual_server $servername"
 	fi
 
-	if (( $debug==1 )); then 
+	if (( debug==1 )); then 
 		debugmsg "[add] $dbg_end"
 	fi
+
 }
 
 export KOREBA_VERSION=0.1
@@ -127,6 +136,10 @@ while (( $# > 0 )); do
 				exit 1;
 			elif [[ "$servername" == "" ]] ; then
 				servername=$(defaultSN)
+				uscita=$?
+				if ((uscita!=0)); then 
+					exit $uscita
+				fi
 			else 
 				others=$others' '$1
 			fi 
