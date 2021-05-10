@@ -14,7 +14,34 @@
 # read license at the end of this file	#
 #########################################
 
+# GLOBAL VARIABLES
+
+export KOREBA_VERSION=0.1
+
+## DEBUG ZONE
+### debug flag
+debug=0
+
+## SERVER ZONE
+### name of actual server
+servername=""
+### ip address of actual server
+address=""
+### name of user of server
+uname=""
+### psk of user of server
+upassword=""
+
+## CONTEXT ZONE
+op=""
+others=""
+
+# shellcheck disable=SC1091
+source constants.sh
+
+# PRELOADING - translations and errors
 function error (){
+	menu_help
 	echo ""
 	echo -e "[ERR] : $*"
 }
@@ -26,25 +53,31 @@ if [[ -r $translations ]]; then
 	source "$translations" 
 else 
 	error "no access to translations file"; 
-	exit 14; 
+	return 14; 
 fi
+
+
+# FUNCTIONS 
 
 function menu_help(){
 	sft_name=$0
 	sft_name=$(basename "$sft_name")
 
-	echo -e "$menu_help_msg"
+	echo -e "${menu_help_msg:?}"
 }
 
 function debugmsg() {
-	echo "[DEBUG] $*"
+	if((debug==1));then
+		echo "[DEBUG] $*"
+	fi
 }
 
 function errorCodes () {
 	echo -e "List of error codes:"
 	echo -e "\t  1 : not found param"
-	echo -e "\t  1 : not found actions"
-	echo -e "\t  2 : not found servername"
+	echo -e "\t  2 : not found actions"
+	echo -e "\t  3 : not found servername"
+	echo -e "\t  4 : too much parameters"
 	echo -e "\t 10 : file not found"
 	echo -e "\t 11 : not found config dir"
 	echo -e "\t 12 : not found config file"
@@ -59,240 +92,261 @@ function errorCodes () {
 	echo -e "\t255 : generic errors"
 }
 
+function fillServer(){
+	servername=$(cut -d "${field_separator:?}" -f 1 <<< "$1")
+	address=$(cut -d "${field_separator:?}" -f 2 <<< "$1")
+	uname=$(cut -d "${field_separator:?}" -f 3 <<< "$1")
+	upassword=$(cut -d "${field_separator:?}" -f 4 <<< "$1")
+}
+
 function defaultSN(){
 	## search for default server name
-	if [ ! -r "$koreba_config_dir"  ]; then 
-		echo "$err_existence_config_dir"
+	if [ ! -r "${koreba_config_dir:?}"  ]; then 
+		error "${err_existence_config_dir:?}"
 		return 11
-	elif [ ! -r "$koreba_known_host" ]; then 
-		echo "$err_existence_known_file"
+	elif [ ! -r "${koreba_known_host:?}" ]; then 
+		error "${err_existence_known_file:?}"
 		return 13
 	fi
 
+	firstServer=""
+	favourite=0
 	defaultServer=""
+	n=0
 
-	echo $defaultServer
+	OIFS=$IFS
+	IFS=$'\n'
+	# shellcheck disable=SC2013
+	for i in $(cat "${koreba_known_host:?}"); do
+		debugmsg "[defaultSN] ${dbg_defaultsn_actual_line:?} $i"
+		debugmsg "[defaultSN] ${dbg_defaultsn_actual_nline:?} $n"
+
+		if ((n==0)); then
+			debugmsg "[defaultSN] ${dbg_defaultsn_first:?}"
+			firstServer=$i
+			n=1
+		fi
+
+		if [[ "$favourite" == "1" ]]; then
+			debugmsg "[defaultSN] ${dbg_defaultsn_favourite_found:?}" 
+			defaultServer=$i
+		fi
+	done	
+	IFS=$OIFS
+
+	if [[ "$firstServer" == "" ]]; then 
+		error "${err_default_server:?}"
+	fi
+
+	if [[ "$defaultServer" == ""  ]]; then
+		defaultServer="$firstServer";
+	fi
+
+	fillServer "$defaultServer"
 
 	return 0
 }
 
+function searchServer () {
+	foundedserver=$(grep -w "$servername"  "${koreba_known_host:?}")
+
+	[[ "$foundedserver" == "" ]] && return 
+
+	fillServer "$foundedserver"
+}
+
 function adds () {
 	
-	if (( debug==1 )); then 
-		debugmsg "[add] $dbg_actual_server $servername"
+	debugmsg "[add] ${dbg_actual_server:?} $servername"
+
+	if [ ! -r "${koreba_config_dir:?}" ]; then
+		debugmsg "[add] ${dbg_config_dir_creation:?}"
+		mkdir "${koreba_config_dir:?}"
 	fi
 
-	# TODO XXX add a check on server name no contains ,
-
-	if [ ! -r "$koreba_config_dir" ]; then
-		if (( debug==1 )); then 
-			debugmsg "[add] $dbg_config_dir_creation"
-		fi
-		mkdir "$koreba_config_dir"
-	fi
-
-	if [ ! -r "$koreba_config_dir" ]; then
-		error $err_add_cant_create_config_dir
+	if [ ! -r "${koreba_config_dir:?}" ]; then
+		error "${err_add_cant_create_config_dir:?}"
 		return 21
 	fi
 
-	if [ ! -r "$koreba_known_host" ]; then 
-		if (( debug==1 )); then 
-			debugmsg "[add] $dbg_config_file_creation"
-		fi
-		touch "$koreba_known_host"
+	if [ ! -r "${koreba_known_host:?}" ]; then 
+		debugmsg "[add] ${dbg_config_file_creation:?}"
+		touch "${koreba_known_host:?}"
 	fi
 
-	if [ ! -r "$koreba_config_dir" ]; then
-		error $err_add_cant_create_known_file
+	if [ ! -r "${koreba_config_dir:?}" ]; then
+		error "${err_add_cant_create_known_file:?}"
 		return 23
 	fi
 
 	n=0
-	address=""
-	name=""
-	password=""
+	
+	searchServer "$servername"
+
+	if [[ "$address" != "" ]]; then 
+		error "${err_add_server_already_exists:?}"
+		return 30;
+	fi
 
 	for i in $others; do 
 		case $n in  
 			'0') address=$i;;
-			'1') name=$i;;
-			'2') password=$i;;
-			*) ;;
+			'1') uname=$i;;
+			'2') upassword=$i;;
+			 * ) 
+				 error "${err_add_overflow:?}"
+				 return 4;;
 		esac
 		n=$((n+1))
 	done
 
 	if [[ ! $address =~ ^([0-9]{1,3}.){3}[0-9]{1,3}(:[0-9]{1,5})?$ ]]; then 
-		error $err_add_ip_not_valid
+		error "${err_add_ip_not_valid:?}"
 		return 31
 	fi
 
 	port=$(cut -d ':' -f 2 <<< "$address")
 	if [[ "$port" == "$address" ]]; then 
-		if (( debug ==1 )); then 
-			debugmsg "[add] $dbg_add_no_port"
-		fi
+		debugmsg "[add] ${dbg_add_no_port:?}"
 		port=8080 # default port for kodi servers
 	else 
 		address=$(cut -d ':' -f 1 <<< "$address")
 	fi
 
-	if (( debug==1 )); then 
 		debugmsg "[add] address $address"
 		debugmsg "[add] port $port"
-		debugmsg "[add] name $name"
-		debugmsg "[add] password $password"
-	fi
+		debugmsg "[add] uname $uname"
+		debugmsg "[add] upassword $upassword"
 
 	# TODO search for existing servername
 
-	echo "$servername,$address,$port,$password" >> "$koreba_known_host"
+	echo "$servername,$address,$port,$uname,$upassword" >> "${koreba_known_host:?}"
+	
+	# shellcheck disable=SC2059
+	printf "${msg_add_ok:?}\n" "$servername" "$address:$port"
 
-	printf "$msg_add_ok\n" "$servername" "$address:$port"
 
-
-	if (( debug==1 )); then 
-		debugmsg "[add] $dbg_end"
-	fi
+		debugmsg "[add] ${dbg_end:?}"
 
 }
 
-export KOREBA_VERSION=0.1
-
-koreba_config_dir=$HOME/.config/koreba
-koreba_config_file=$koreba_config_dir/config 
-koreba_known_host=$koreba_config_dir/known_host
-debug=0
-
-content_type='"Content-Type: application/json;"'
-op=""
-servername=""
-others=""
-
-
-
-
 # MAIN 
+function startMain() {
+	if (($#==0)); then 
+		error "no action"
+		return 2
+	fi;
 
-if (($#==0)); then 
-	menu_help
-	error "no action"
-	exit 2
-fi;
-
-while (( $# > 0 )); do 
-	if [[ $1 == "-d" || $1 == "--debug" ]] || (( debug==1 )); then 
-		echo "[DEBUG] $dbg_parameter_msg $1"
-	fi
-	case $1 in
-		"-d"|"--debug") debug=1;;
-		"add"|"-a"|"--add-server") op="a" ;;
-		"remove"|"-rm"|"--remove-server") op="rm" ;;
-		"rename"|"-rn"|"--rename-server") op="rn" ;;
-		"usern"|"-un"|"--user-name") op="un" ;;
-		"userp"|"-up"|"--user-password") op="up" ;;
-		"play"| "-p"|"--play") op="p";;
-		"yplay" | "-yp"|"--youtube-play"|"--yt-play") op="y";;
-		"set" |"-s"|"--set") op="s";;
-		"volume"|"-sv"|"--set-volume") op="sv";;
-		"go"|"-g"|"--go") op="g";;
-		"help" | "-h" | "--help" ) 
-			menu_help
-			exit 0
-		;;
-		"errors" | "-e" | "--error-codes" ) 
-			errorCodes
-			exit 0
-		;;
-		* ) 
-			if [[ "$servername" == "" && "$op" == "" ]];
-				then servername="$1";
-			elif [[ "$op" == "" ]]; then 
+	while (( $# > 0 )); do 
+		if [[ $1 == "-d" || $1 == "--debug" ]] || ((debug==1)); then 
+			# the only explicit debugmsg
+			echo "[DEBUG] ${dbg_parameter_msg:?} $1"
+		fi
+		case $1 in
+			"-d"|"--debug") debug=1;;
+			"add"|"-a"|"--add-server") op="a" ;;
+			"remove"|"-rm"|"--remove-server") op="rm" ;;
+			"rename"|"-rn"|"--rename-server") op="rn" ;;
+			"usern"|"-un"|"--user-name") op="un" ;;
+			"userp"|"-up"|"--user-password") op="up" ;;
+			"play"| "-p"|"--play") op="p";;
+			"yplay" | "-yp"|"--youtube-play"|"--yt-play") op="y";;
+			"set" |"-s"|"--set") op="s";;
+			"volume"|"-sv"|"--set-volume") op="sv";;
+			"go"|"-g"|"--go") op="g";;
+			"help" | "-h" | "--help" ) 
 				menu_help
-				error "$err_action_first"; 
-				exit 2;
-			elif [[ "$servername" == "" && "$op" == "" ]] ; then
-				servername=$(defaultSN)
-				uscita=$?
-				if ((uscita!=0)); then 
-					menu_help
-					error $servername
-					exit $uscita
-				fi
-			else 
-				others=$others' '$1
-			fi 
+				return 0
+			;;
+			"errors" | "-e" | "--error-codes" ) 
+				errorCodes
+				return 0
+			;;
+			* ) 
+				if [[ "$servername" == "" && "$op" == "" ]];
+					then servername="$1";
+				elif [[ "$op" == "" ]]; then 
+					error "${err_action_first:?}"; 
+					return 2;
+				else
+					others=$others' '$1
+				fi 
 
-			## servername!=vuoto e op!=vuoto
+				## servername!=vuoto e op!=vuoto
 
 
-			
-		;; 
+				
+			;; 
+		esac
+
+		shift
+	done
+
+	if [[ "$servername" == "" ]] ; then
+		if [[ "$op" == "a" ]]; then 
+			error "${err_server_required:?}"
+			return 3
+		fi
+		defaultSN
+		uscita=$?
+		if ((uscita!=0)); then 
+			return $uscita
+		fi
+	fi
+
+	
+	debugmsg "${dbg_actual_op:?} $op"
+	debugmsg "${dbg_actual_server:?} $servername"
+	debugmsg "${dbg_actual_others:?} $others"
+
+	if (( debug==1 )); then 
+			echo -e "============================="
+	fi
+
+	uscita=0
+
+	case $op in 
+
+		"a")  adds       ;
+			uscita=$?;;
+		"rm") remove     ;
+			uscita=$?;;
+		"rn") rename     ;
+			uscita=$?;;
+		"un") usern      ;
+			uscita=$?;;
+		"up") userp      ;
+			uscita=$?;;
+		"p")  play       ;
+			uscita=$?;;
+		"yp") yplay      ;
+			uscita=$?;;
+		"g")  go         ;
+			uscita=$?;;
+		"s")  settingset ;
+			uscita=$?;;
+		"sv") settingset "volume";
+			uscita=$?;;
+		"") 
+			if [[ $servername != "" || $others != "" ]]; then 
+				error "${err_invalid_action:?}"
+			fi
+			return 30;;
+
 	esac
 
-	shift
-done
 
-if [[ "$servername" == "" ]] ; then
-	menu_help
-	error "$err_default_server"
-	exit 3;
-fi
+	if (( debug==1 )); then 
+			echo -e "============================="
+	fi
 
-if [[ $1 == "-d" || $1 == "--debug" ]] || (( debug==1 )); then 
-		debugmsg "$dbg_actual_op $op"
-		debugmsg "$dbg_actual_server $servername"
-		debugmsg "$dbg_actual_others $others"
-fi
+	debugmsg "${dbg_exit_value:?}="$uscita 
 
-if (( debug==1 )); then 
-		echo -e "============================="
-fi
+	return $uscita
+}
 
-uscita=0
-
-case $op in 
-
-	"a")  adds       ;
-		uscita=$?;;
-	"rm") remove     ;
-		uscita=$?;;
-	"rn") rename     ;
-		uscita=$?;;
-	"un") usern      ;
-		uscita=$?;;
-	"up") userp      ;
-		uscita=$?;;
-	"p")  play       ;
-		uscita=$?;;
-	"yp") yplay      ;
-		uscita=$?;;
-	"g")  go         ;
-		uscita=$?;;
-	"s")  settingset ;
-		uscita=$?;;
-	"sv") settingset "volume";
-		uscita=$?;;
-	"") 
-		menu_help 
-		if [[ $servername != "" || $others != "" ]]; then 
-			error "$err_invalid_action"
-		fi
-		exit 30;;
-
-esac
-
-
-if (( debug==1 )); then 
-		echo -e "============================="
-fi
-
-if (( debug==1 )); then 
-	debugmsg "$dbg_exit_value="$uscita 
-fi
-
-exit $uscita
+startMain "$@"
+exit $?
 
 #############################################################
 #                     GNU GENERAL PUBLIC LICENSE
