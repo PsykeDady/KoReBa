@@ -15,8 +15,8 @@
 #########################################
 
 # GLOBAL VARIABLES
-
-export KOREBA_VERSION=0.1
+## KOREBA VERSION 
+export KOREBA_VERSION=0.2
 
 ## DEBUG ZONE
 ### debug flag
@@ -33,20 +33,26 @@ uname=""
 upassword=""
 
 ## CONTEXT ZONE
+### actual operation
 op=""
+### other parameters
 others=""
 
 # shellcheck disable=SC1091
 source constants.sh
 
+## TRANSLATION FILE WITH DEFAULT VALUE
+translations="TRANSLATIONS/en.sh"
+
 # PRELOADING - translations and errors
+
+## print error 
 function error (){
 	menu_help
 	echo ""
-	echo -e "[ERR] : $*"
+	echo -e "[ERR] : $*" > /dev/stderr
 }
 
-translations="TRANSLATIONS/en.sh"
 
 if [[ -r $translations ]]; then
 	# shellcheck disable=SC1090
@@ -59,6 +65,7 @@ fi
 
 # FUNCTIONS 
 
+## Print help menu
 function menu_help(){
 	sft_name=$0
 	sft_name=$(basename "$sft_name")
@@ -66,12 +73,14 @@ function menu_help(){
 	echo -e "${menu_help_msg:?}"
 }
 
+## print a debug message
 function debugmsg() {
 	if((debug==1));then
-		echo "[DEBUG] $*"
+		echo -e "[DEBUG] $*"
 	fi
 }
 
+## print list of error codes
 function errorCodes () {
 	echo -e "List of error codes:"
 	echo -e "\t  1 : not found param"
@@ -89,9 +98,12 @@ function errorCodes () {
 	echo -e "\t 23 : can't create known hosts file"
 	echo -e "\t 30 : not valid param"
 	echo -e "\t 31 : not valid ip address"
+	echo -e "\t 32 : not valid server name"
 	echo -e "\t255 : generic errors"
 }
 
+
+## set all parameters with input $1 using field separator 
 function fillServer(){
 	servername=$(cut -d "${field_separator:?}" -f 1 <<< "$1")
 	address=$(cut -d "${field_separator:?}" -f 2 <<< "$1")
@@ -99,6 +111,7 @@ function fillServer(){
 	upassword=$(cut -d "${field_separator:?}" -f 4 <<< "$1")
 }
 
+## check for defautl server name line, or for first line if default not found
 function defaultSN(){
 	## search for default server name
 	if [ ! -r "${koreba_config_dir:?}"  ]; then 
@@ -147,6 +160,7 @@ function defaultSN(){
 	return 0
 }
 
+## search $servername on koreba known hosts file. if found, use fillServer to set parameters
 function searchServer () {
 	foundedserver=$(grep -w "$servername"  "${koreba_known_host:?}")
 
@@ -155,6 +169,7 @@ function searchServer () {
 	fillServer "$foundedserver"
 }
 
+## add a server into known host file of koreba
 function adds () {
 	
 	debugmsg "[add] ${dbg_actual_server:?} $servername"
@@ -226,8 +241,30 @@ function adds () {
 	printf "${msg_add_ok:?}\n" "$servername" "$address:$port"
 
 
-		debugmsg "[add] ${dbg_end:?}"
+	debugmsg "[add] ${dbg_end:?}"
 
+}
+
+## remove server from koreba known file, if found
+function remove () {
+
+	debugmsg "[remove] ${dbg_actual_server:?} $servername"
+
+	debugmsg "[remove] ${dbg_remove_old_text:?}""$(cat "${koreba_known_host:?}")"
+	linenumber=$(grep -wn "$servername"  "${koreba_known_host:?}" | cut -d ':' -f 1)
+	debugmsg "[remove] ${dbg_remove_linenumber:?}""$linenumber"
+	linenumber=${linenumber:=-1}
+
+	if(( linenumber > 0 )); then 
+		contents=$(sed $linenumber"d" "${koreba_known_host:?}") 
+		debugmsg "[remove] ${dbg_remove_content:?} $contents"
+		echo "$contents" > "${koreba_known_host:?}"
+	else 
+		error "${err_remove_not_found:?}"
+		return 32
+	fi
+
+	debugmsg "[remove] ${dbg_end:?}"
 }
 
 # MAIN 
@@ -271,11 +308,6 @@ function startMain() {
 				else
 					others=$others' '$1
 				fi 
-
-				## servername!=vuoto e op!=vuoto
-
-
-				
 			;; 
 		esac
 
@@ -307,7 +339,7 @@ function startMain() {
 
 	case $op in 
 
-		"a")  adds       ;
+		 "a")  adds       ;
 			uscita=$?;;
 		"rm") remove     ;
 			uscita=$?;;
@@ -317,17 +349,17 @@ function startMain() {
 			uscita=$?;;
 		"up") userp      ;
 			uscita=$?;;
-		"p")  play       ;
+		 "p")  play       ;
 			uscita=$?;;
 		"yp") yplay      ;
 			uscita=$?;;
-		"g")  go         ;
+		 "g")  go         ;
 			uscita=$?;;
-		"s")  settingset ;
+		 "s")  settingset ;
 			uscita=$?;;
 		"sv") settingset "volume";
 			uscita=$?;;
-		"") 
+		 "") 
 			if [[ $servername != "" || $others != "" ]]; then 
 				error "${err_invalid_action:?}"
 			fi

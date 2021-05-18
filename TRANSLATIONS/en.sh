@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # This file is part of "KoReBa" by PsykeDady
-# released under GPLv3. Real LICENSE file or footer of koreba.sh file
+# released under GPLv3. Read LICENSE file or footer of koreba.sh file
 
 menu_help_msg="KoReBa is a kodi remote you can use on every bash in order to control via http your kodi installation"
 menu_help_msg=$menu_help_msg"\n""\nHow to use:"
@@ -27,11 +27,18 @@ dbg_end="end"
 dbg_config_dir_creation="creation of config dir ..."
 dbg_config_file_creation="creation of config file ..."
 dbg_known_file_creation="creation of known hosts file ..."
+
+### add
 dbg_add_no_port="no port found"
+### defaultsn
 dbg_defaultsn_actual_line="actual koreba known hosts line"
 dbg_defaultsn_actual_nline="actual koreba known hosts number line"
 dbg_defaultsn_first="set first server..."
 dbg_defaultsn_favourite_found="favourite server found ..."
+### remove
+dbg_remove_old_text="old content=\n"
+dbg_remove_linenumber="line number="
+dbg_remove_content="content=\n"
 
 ## ERRORS
 ### MAIN 
@@ -51,7 +58,8 @@ err_add_overflow="to much parameters. You can specify (in order) ip:port usernam
 err_add_ip_not_valid='not valid ip'
 err_add_required_address="ip address required at least for connection with kodi server"
 
-
+## remove
+err_remove_not_found="server name not found"
 
 
 export menu_help_msg
@@ -72,6 +80,9 @@ export dbg_defaultsn_actual_line
 export dbg_defaultsn_actual_nline
 export dbg_defaultsn_first
 export dbg_defaultsn_favourite_found
+export dbg_remove_old_text
+export dbg_remove_linenumber
+export dbg_remove_content
 
 export err_default_server
 export err_server_required
@@ -87,3 +98,4 @@ export err_add_overflow
 export err_add_ip_not_valid
 export err_add_required_address
 
+export err_remove_not_found
